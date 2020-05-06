@@ -4,7 +4,7 @@
 
 const int TRIG_PIN = 6;
 const int ECHO_PIN = 7;
-const int BUTTON_PIN = 5;
+const int BUTTON_PIN = 3;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -30,7 +30,8 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT);
- 
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), doZeroing, RISING );
+
 
   startMillis = millis();
 }
@@ -40,21 +41,14 @@ unsigned long measurements [NUM_SAMPLES];
 
 
 int sample = 0;
-unsigned int average = 0;
-unsigned int zeroing_distance = 0;
-bool use_zeroing = false;
+volatile unsigned int average = 0;
+volatile unsigned int zeroing_distance = 0;
+volatile bool use_zeroing = false;
+volatile bool graphics_dirty = false;
 
 void loop() {
   long duration = 0;
   unsigned long cm = 0;
-  buttonState = digitalRead(BUTTON_PIN);
-
-  if (buttonState == HIGH)
-  {
-    zeroing_distance = average;
-    use_zeroing = !use_zeroing; // Toggle zeroing
-  }
- 
 
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
@@ -78,20 +72,13 @@ void loop() {
   int sum = 0;
   for (int i = 0; i < NUM_SAMPLES; i++)
   {
-    //  Serial.print(measurements[i]);
-    //  Serial.print(",");
-    sum = sum + measurements[i];;
-
+    sum = sum + measurements[i];
   }
   average = sum / NUM_SAMPLES;
-  //  Serial.print(" Average : ");
-  //  Serial.print(sum/NUM_SAMPLES);
-  //   Serial.println("");
-
-  //  Serial.print("cm ");
-  //  Serial.print(cm);
+ 
   currentMillis = millis();
-  if (currentMillis - startMillis >= period)
+  if ((currentMillis - startMillis >= period) ||
+       graphics_dirty == true)
   {
     lcd.clear();
 
@@ -112,16 +99,21 @@ void loop() {
     }
 
 
-
     lcd.setCursor(8, 0);
     lcd.print("Average:");
     lcd.setCursor(10, 1);
     lcd.print(average);
 
     startMillis = currentMillis;
+    graphics_dirty = false;
   }
 
-  //  Serial.println();
-
   delay(10);
+}
+
+void doZeroing()
+{
+  use_zeroing = !use_zeroing;
+  zeroing_distance = average;
+  graphics_dirty = true;
 }
