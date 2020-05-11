@@ -20,6 +20,7 @@ WiFiClient client;
 BMP180I2C bmp180(I2C_ADDRESS);
 bool bmp180_found = false;
 
+//#define DEBUG 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -77,6 +78,8 @@ void loop() {
   if (bmp180_found)
   {
     fromBMP(pressure, tmp);
+    delay(100);
+    fromBMP(pressure, tmp);
     /*
       Serial.print("\nBMP180 Temperature: ");
       Serial.println(tmp);
@@ -102,13 +105,15 @@ void loop() {
   Serial.print("[HTTP] begin...\n");
   String url("http://www.polvott.net/iot/met.cgi?" + temperature + prs);
   Serial.printf("[HTTP] url : %s\n", url.c_str());
-  if (http.begin(client, "http://www.polvott.net/iot/met.cgi?" + temperature + prs ))
+  if (http.begin(client, url ))
   {
-
-
     Serial.print("[HTTP] GET...\n");
     // start connection and send HTTP header
+#ifdef DEBUG
+    int httpCode = HTTP_CODE_NOT_FOUND; 
+#else
     int httpCode = http.GET();
+#endif
 
     // httpCode will be negative on error
     if (httpCode > 0) {
@@ -131,8 +136,12 @@ void loop() {
 
 
   Serial.println("Going to sleep...");
+#ifdef DEBUG
+  delay(1000);
+#else
   ESP.deepSleep(10 * 60e6);
   delay(10000);
+#endif
 
 }
 
