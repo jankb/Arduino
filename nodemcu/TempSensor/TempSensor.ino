@@ -1,6 +1,6 @@
 
 #include "DHT.h"
-#define DHTPIN 4        // what digital pin the DHT22 is conected to
+#define DHTPIN D3        // what digital pin the DHT22 is conected to
 #define DHTTYPE DHT22   // there are multiple kinds of DHT sensors
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -13,6 +13,12 @@ WiFiClient client;
 //#define WLAN_PASS       ""
 #include <wificred.h>
 
+#include <Wire.h>
+#include <BMP180I2C.h>
+#define I2C_ADDRESS 0x77
+//create an BMP180 object using the I2C interface
+BMP180I2C bmp180(I2C_ADDRESS);
+bool bmp180_found = false;
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -20,7 +26,7 @@ void setup() {
   Serial.begin(115200);
   delay(10);
 
-  Serial.print("Sketch:   ");   Serial.println(__FILE__);
+  Serial.print("\n\nSketch:   ");   Serial.println(__FILE__);
   Serial.print("Uploaded: ");   Serial.println(__DATE__);
 
   Serial.print("Connecting to ");
@@ -43,12 +49,41 @@ void setup() {
   Serial.println("IP address: "); Serial.println(WiFi.localIP());
 
 
+  Wire.begin();
+
+  //begin() initializes the interface, checks the sensor ID and reads the calibration parameters.
+  if (!bmp180.begin())
+  {
+    Serial.println("begin() failed. check your BMP180 Interface and I2C Address.");
+
+  }
+  else
+  {
+    bmp180_found = true;
+  }
+
+  if (bmp180_found)
+  {
+    bmp180.resetToDefaults();
+    bmp180.setSamplingMode(BMP180MI::MODE_UHR);
+  }
 }
 
 
-// the loop function runs over and over again forever
+
 void loop() {
-  // wait for a second
+  float tmp = 0.0;
+  float pressure = 0.0;
+  if (bmp180_found)
+  {
+    fromBMP(pressure, tmp);
+    /*
+      Serial.print("\nBMP180 Temperature: ");
+      Serial.println(tmp);
+      Serial.print("\nBMP180 Pressure: ");
+      Serial.println(pressure);
+    */
+  }
 
   float t = dht.readTemperature();
   if (isnan(t) == false)
@@ -57,22 +92,23 @@ void loop() {
     Serial.println(t);
 
   }
-  String temperature = "temp=" + String(t);
+  String temperature = "temp=" + String(tmp);
+  String prs =  "&pressure=" + String(pressure);
 
-  
+
 
   HTTPClient http;
 
   Serial.print("[HTTP] begin...\n");
-  String url("http://www.polvott.net/iot/met.cgi?" + temperature + "&pressure=0");
+  String url("http://www.polvott.net/iot/met.cgi?" + temperature + prs);
   Serial.printf("[HTTP] url : %s\n", url.c_str());
-  if (http.begin(client, "http://www.polvott.net/iot/met.cgi?" + temperature + "&pressure=0" ))
+  if (http.begin(client, "http://www.polvott.net/iot/met.cgi?" + temperature + prs ))
   {
 
 
     Serial.print("[HTTP] GET...\n");
     // start connection and send HTTP header
-    int httpCode =  http.GET();
+    int httpCode = http.GET();
 
     // httpCode will be negative on error
     if (httpCode > 0) {
@@ -95,7 +131,34 @@ void loop() {
 
 
   Serial.println("Going to sleep...");
-  ESP.deepSleep(5*60e6);
-  delay(1000);
+  ESP.deepSleep(10 * 60e6);
+  delay(10000);
 
+}
+
+void fromBMP(float &pressure, float &temperature)
+{
+  if (!bmp180.measureTemperature())
+  {
+    Serial.println("could not start temperature measurement, is a measurement already running?");
+    return;
+  }
+  do
+  {
+    delay(100);
+  } while (!bmp180.hasValue());
+
+  temperature = bmp180.getTemperature();
+  if (!bmp180.measurePressure())
+  {
+    Serial.println("could not start perssure measurement, is a measurement already running?");
+    return;
+  }
+
+  do
+  {
+    delay(100);
+  } while (!bmp180.hasValue());
+
+  pressure = bmp180.getPressure() * 0.01;
 }
